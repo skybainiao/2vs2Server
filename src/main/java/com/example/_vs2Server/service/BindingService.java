@@ -11,7 +11,7 @@ import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -28,65 +28,59 @@ public class BindingService {
         processSource(request.getSource2(), binding, 2);
         processSource(request.getSource3(), binding, 3);
 
-
         matchBindingRepository.save(binding);
-
     }
 
     private void processSource(BindingRequest.SourceData sourceData, MatchBinding binding, int sourceNum) {
-        // 处理联赛
-        League league = leagueRepository.findByExternalIdAndSource(sourceData.getExternalId(), sourceData.getSource())
-                .orElseGet(() -> {
-                    League newLeague = new League();
-                    newLeague.setName(sourceData.getLeagueName());
-                    newLeague.setSource(sourceData.getSource());
-                    newLeague.setExternalId(sourceData.getExternalId());
-                    return leagueRepository.save(newLeague);
-                });
+        if (sourceData == null) {
+            return;
+        }
 
-        // 处理主队
-        Team homeTeam = teamRepository.findByExternalIdAndSource(sourceData.getExternalId() + "_home", sourceData.getSource())
-                .orElseGet(() -> {
-                    Team newTeam = new Team();
-                    newTeam.setName(sourceData.getHomeTeam());
-                    newTeam.setSource(sourceData.getSource());
-                    newTeam.setExternalId(sourceData.getExternalId() + "_home");
-                    return teamRepository.save(newTeam);
-                });
+        League league = getOrCreateLeague(sourceData.getLeagueName(), sourceData.getSource());
 
-        // 处理客队
-        Team awayTeam = teamRepository.findByExternalIdAndSource(sourceData.getExternalId() + "_away", sourceData.getSource())
-                .orElseGet(() -> {
-                    Team newTeam = new Team();
-                    newTeam.setName(sourceData.getAwayTeam());
-                    newTeam.setSource(sourceData.getSource());
-                    newTeam.setExternalId(sourceData.getExternalId() + "_away");
-                    return teamRepository.save(newTeam);
-                });
+        Team homeTeam = getOrCreateTeam(sourceData.getHomeTeam(), sourceData.getSource(), league);
+        Team awayTeam = getOrCreateTeam(sourceData.getAwayTeam(), sourceData.getSource(), league);
 
-        // 设置到binding对象
         switch (sourceNum) {
             case 1:
                 binding.setLeague1(league);
                 binding.setHomeTeam1(homeTeam);
                 binding.setAwayTeam1(awayTeam);
-                binding.setMatchTime1(LocalDateTime.parse(sourceData.getMatchTime()));
                 binding.setSource1(sourceData.getSource());
                 break;
             case 2:
                 binding.setLeague2(league);
                 binding.setHomeTeam2(homeTeam);
                 binding.setAwayTeam2(awayTeam);
-                binding.setMatchTime2(LocalDateTime.parse(sourceData.getMatchTime()));
                 binding.setSource2(sourceData.getSource());
                 break;
             case 3:
                 binding.setLeague3(league);
                 binding.setHomeTeam3(homeTeam);
                 binding.setAwayTeam3(awayTeam);
-                binding.setMatchTime3(LocalDateTime.parse(sourceData.getMatchTime()));
                 binding.setSource3(sourceData.getSource());
                 break;
         }
+    }
+
+    private League getOrCreateLeague(String name, Integer source) {
+        return leagueRepository.findByNameAndSource(name, source)
+                .orElseGet(() -> {
+                    League league = new League();
+                    league.setName(name);
+                    league.setSource(source);
+                    return leagueRepository.save(league);
+                });
+    }
+
+    private Team getOrCreateTeam(String name, Integer source, League league) {
+        return teamRepository.findByNameAndSource(name, source)
+                .orElseGet(() -> {
+                    Team team = new Team();
+                    team.setName(name);
+                    team.setSource(source);
+                    team.setLeague(league);
+                    return teamRepository.save(team);
+                });
     }
 }

@@ -9,9 +9,8 @@ public class BindingRequest {
         private String leagueName;
         private String homeTeam;
         private String awayTeam;
-        private String matchTime;
         private Integer source;
-        private String externalId; // 来自原始数据的唯一标识
+
     }
 
     private SourceData source1;

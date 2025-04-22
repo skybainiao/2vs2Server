@@ -4,16 +4,26 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
 import lombok.Data;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Data
+@Table(uniqueConstraints = {
+        @jakarta.persistence.UniqueConstraint(columnNames = {"name", "source"})
+})
 public class League {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     private String name;
-    private Integer source; // 1,2,3代表数据来源
-    private String externalId; // 原始数据中的唯一标识
+    private Integer source;
+
+    @OneToMany(mappedBy = "league")
+    private List<Team> teams = new ArrayList<>();
 }
