@@ -13,15 +13,16 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/bindings")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*") // 根据需要调整CORS策略
+@CrossOrigin(origins = "*")
 public class BindingController {
 
-    private final BindingService bindingService;  // 确保这个字段是final的
+    private final BindingService bindingService;
 
     @PostMapping
-    public ResponseEntity<?> createBinding(@RequestBody List<BindingRequest> requests) {
+    public ResponseEntity<?> createBinding(@RequestBody List<BindingRequest> requests) { // 改回List类型
+        System.out.println(requests);
         try {
-            requests.forEach(bindingService::saveBinding);
+            requests.forEach(bindingService::saveBinding); // 保持服务方法参数为单个请求
             return ResponseEntity.ok().build();
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

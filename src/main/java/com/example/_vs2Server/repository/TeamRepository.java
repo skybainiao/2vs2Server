@@ -6,5 +6,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.Optional;
 
 public interface TeamRepository extends JpaRepository<Team, Long> {
-    Optional<Team> findByNameAndSource(String name, Integer source);
+    boolean existsByGroupIdAndSource(String groupId, Integer source);
 }

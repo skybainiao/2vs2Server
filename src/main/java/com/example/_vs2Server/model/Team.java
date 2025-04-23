@@ -1,18 +1,12 @@
 package com.example._vs2Server.model;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import lombok.Data;
 
 @Entity
 @Data
 @Table(uniqueConstraints = {
-        @jakarta.persistence.UniqueConstraint(columnNames = {"name", "source"})
+        @UniqueConstraint(columnNames = {"groupId", "source"}) // 同一组内数据源唯一
 })
 public class Team {
     @Id
@@ -21,8 +15,10 @@ public class Team {
 
     private String name;
     private Integer source;
+    private String groupId; // 队伍关联组ID
+    private String role;     // 主队/客队标识（home/away）
 
     @ManyToOne
-    @JoinColumn(name = "league_id")
+    @JoinColumn(name = "league_group_id") // 关联同数据源联赛
     private League league;
 }
