@@ -1,6 +1,7 @@
 package com.example._vs2Server.controller;
 
 import com.example._vs2Server.dto.BindingRequest;
+import com.example._vs2Server.dto.CheckDuplicateRequest;
 import com.example._vs2Server.model.Binding;
 import com.example._vs2Server.service.BindingService;
 import lombok.RequiredArgsConstructor;
@@ -10,9 +11,11 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/bindings")
+@CrossOrigin(origins = "*") // 允许所有来源
 public class BindingController {
 
     private final BindingService bindingService;
@@ -34,5 +37,12 @@ public class BindingController {
     @GetMapping
     public ResponseEntity<List<Binding>> getAllBindings() {
         return ResponseEntity.ok(bindingService.getAllBindings());
+    }
+
+    @PostMapping("/check-duplicates")
+    public ResponseEntity<Map<String, Set<String>>> checkDuplicates(@RequestBody CheckDuplicateRequest request) {
+        System.out.println("1111");
+        Map<String, Set<String>> duplicates = bindingService.checkDuplicates(request);
+        return ResponseEntity.ok(duplicates);
     }
 }
