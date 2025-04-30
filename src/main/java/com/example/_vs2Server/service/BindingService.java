@@ -33,39 +33,55 @@ public class BindingService {
 
     @Transactional
     public void saveBindings(List<BindingRequest> requests) {
-        List<Binding> existingBindings = getAllBindings();
         requests.forEach(request -> {
             Binding binding = new Binding();
             // Source 1
-            binding.setSource1League(request.getSource1().getLeagueName());
-            binding.setSource1HomeTeam(checkAndSetNull(existingBindings, request.getSource1().getHomeTeam()));
-            binding.setSource1AwayTeam(checkAndSetNull(existingBindings, request.getSource1().getAwayTeam()));
+            String league1 = request.getSource1().getLeagueName();
+            binding.setSource1League(league1);
+            binding.setSource1HomeTeam(checkAndSetNull(league1, request.getSource1().getHomeTeam()));
+            binding.setSource1AwayTeam(checkAndSetNull(league1, request.getSource1().getAwayTeam()));
             // Source 2
-            binding.setSource2League(request.getSource2().getLeagueName());
-            binding.setSource2HomeTeam(checkAndSetNull(existingBindings, request.getSource2().getHomeTeam()));
-            binding.setSource2AwayTeam(checkAndSetNull(existingBindings, request.getSource2().getAwayTeam()));
+            String league2 = request.getSource2().getLeagueName();
+            binding.setSource2League(league2);
+            binding.setSource2HomeTeam(checkAndSetNull(league2, request.getSource2().getHomeTeam()));
+            binding.setSource2AwayTeam(checkAndSetNull(league2, request.getSource2().getAwayTeam()));
             // Source 3
-            binding.setSource3League(request.getSource3().getLeagueName());
-            binding.setSource3HomeTeam(checkAndSetNull(existingBindings, request.getSource3().getHomeTeam()));
-            binding.setSource3AwayTeam(checkAndSetNull(existingBindings, request.getSource3().getAwayTeam()));
+            String league3 = request.getSource3().getLeagueName();
+            binding.setSource3League(league3);
+            binding.setSource3HomeTeam(checkAndSetNull(league3, request.getSource3().getHomeTeam()));
+            binding.setSource3AwayTeam(checkAndSetNull(league3, request.getSource3().getAwayTeam()));
             bindingRepository.save(binding);
         });
     }
 
-    private String checkAndSetNull(List<Binding> existingBindings, String value) {
-        for (Binding existingBinding : existingBindings) {
-            if (value != null && (
-                    value.equals(existingBinding.getSource1HomeTeam()) ||
-                            value.equals(existingBinding.getSource1AwayTeam()) ||
-                            value.equals(existingBinding.getSource2HomeTeam()) ||
-                            value.equals(existingBinding.getSource2AwayTeam()) ||
-                            value.equals(existingBinding.getSource3HomeTeam()) ||
-                            value.equals(existingBinding.getSource3AwayTeam())
-            )) {
-                return null;
-            }
+    private String checkAndSetNull(String league, String value) {
+        if (value == null) {
+            return null;
         }
-        return value;
+        CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+        CriteriaQuery<Binding> query = cb.createQuery(Binding.class);
+        Root<Binding> root = query.from(Binding.class);
+
+        Predicate leaguePredicate1 = cb.equal(root.get("source1League"), league);
+        Predicate leaguePredicate2 = cb.equal(root.get("source2League"), league);
+        Predicate leaguePredicate3 = cb.equal(root.get("source3League"), league);
+
+        Predicate teamPredicate1 = cb.equal(root.get("source1HomeTeam"), value);
+        Predicate teamPredicate2 = cb.equal(root.get("source1AwayTeam"), value);
+        Predicate teamPredicate3 = cb.equal(root.get("source2HomeTeam"), value);
+        Predicate teamPredicate4 = cb.equal(root.get("source2AwayTeam"), value);
+        Predicate teamPredicate5 = cb.equal(root.get("source3HomeTeam"), value);
+        Predicate teamPredicate6 = cb.equal(root.get("source3AwayTeam"), value);
+
+        Predicate finalPredicate = cb.and(
+                cb.or(leaguePredicate1, leaguePredicate2, leaguePredicate3),
+                cb.or(teamPredicate1, teamPredicate2, teamPredicate3, teamPredicate4, teamPredicate5, teamPredicate6)
+        );
+
+        query.where(finalPredicate);
+        List<Binding> result = entityManager.createQuery(query).getResultList();
+
+        return result.isEmpty() ? value : null;
     }
 
     public List<Binding> getAllBindings() {
@@ -84,18 +100,51 @@ public class BindingService {
         validateField(homeField);
         validateField(awayField);
 
-        Set<String> leagues = request.getMatches().stream()
-                .map(CheckDuplicateRequest.MatchData::getLeague)
-                .collect(Collectors.toSet());
+        Map<String, Set<String>> leagueTeamsMap = new HashMap<>();
+        request.getMatches().forEach(match -> {
+            String league = match.getLeague();
+            leagueTeamsMap.computeIfAbsent(league, k -> new HashSet<>());
+            leagueTeamsMap.get(league).add(match.getHomeTeam());
+            leagueTeamsMap.get(league).add(match.getAwayTeam());
+        });
 
-        Set<String> teams = request.getMatches().stream()
-                .flatMap(m -> Stream.of(m.getHomeTeam(), m.getAwayTeam()))
-                .collect(Collectors.toSet());
+        Set<String> allLeagues = new HashSet<>();
+        Set<String> allTeams = new HashSet<>();
+
+        leagueTeamsMap.forEach((league, teams) -> {
+            allLeagues.addAll(findExistingValuesInLeague(league, leagueField, leagueField, Collections.singleton(league)));
+            allTeams.addAll(findTeamDuplicatesInLeague(league, leagueField, homeField, awayField, teams));
+        });
 
         return Map.of(
-                "leagues", findExistingValues(leagueField, leagues),
-                "teams", findTeamDuplicates(homeField, awayField, teams)
+                "leagues", new ArrayList<>(allLeagues),
+                "teams", new ArrayList<>(allTeams)
         );
+    }
+
+    private Set<String> findTeamDuplicatesInLeague(String league, String leagueField, String homeField, String awayField, Set<String> teams) {
+        Set<String> result = new HashSet<>();
+        if (!teams.isEmpty()) {
+            result.addAll(findExistingValuesInLeague(league, leagueField, homeField, teams));
+            result.addAll(findExistingValuesInLeague(league, leagueField, awayField, teams));
+        }
+        return result;
+    }
+
+    private Set<String> findExistingValuesInLeague(String league, String leagueField, String field, Set<String> values) {
+        if (values.isEmpty()) return Collections.emptySet();
+
+        CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+        CriteriaQuery<String> query = cb.createQuery(String.class);
+        Root<Binding> root = query.from(Binding.class);
+
+        Predicate leaguePredicate = cb.equal(root.get(leagueField), league);
+        Predicate valuePredicate = root.get(field).in(values);
+
+        query.select(root.get(field)).distinct(true);
+        query.where(cb.and(leaguePredicate, valuePredicate));
+
+        return new HashSet<>(entityManager.createQuery(query).getResultList());
     }
 
     @Transactional
@@ -158,27 +207,6 @@ public class BindingService {
         return entityManager.createQuery(query).getResultList();
     }
 
-    private Set<String> findExistingValues(String field, Set<String> values) {
-        if (values.isEmpty()) return Collections.emptySet();
-
-        CriteriaBuilder cb = entityManager.getCriteriaBuilder();
-        CriteriaQuery<String> query = cb.createQuery(String.class);
-        Root<Binding> root = query.from(Binding.class);
-        query.select(root.get(field)).distinct(true);
-        query.where(root.get(field).in(values));
-
-        return new HashSet<>(entityManager.createQuery(query).getResultList());
-    }
-
-    private Set<String> findTeamDuplicates(String homeField, String awayField, Set<String> teams) {
-        Set<String> result = new HashSet<>();
-        if (!teams.isEmpty()) {
-            result.addAll(findExistingValues(homeField, teams));
-            result.addAll(findExistingValues(awayField, teams));
-        }
-        return result;
-    }
-
     private void validateSource(int source) {
         if (source < 1 || source > 3) {
             throw new IllegalArgumentException("数据源参数必须为1 - 3");
@@ -190,4 +218,4 @@ public class BindingService {
             throw new IllegalArgumentException("无效的字段名称: " + field);
         }
     }
-}    
+}
