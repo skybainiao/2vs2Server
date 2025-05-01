@@ -101,21 +101,21 @@ public class BindingServiceDuplicateTest {
         // 第一条包含重复数据的请求
         BindingRequest request1 = new BindingRequest();
         SourceData source1_1 = new SourceData();
-        source1_1.setLeagueName("Colombia - Primera A");
-        source1_1.setHomeTeam("Atletico Nacional");
-        source1_1.setAwayTeam("1");
+        source1_1.setLeagueName("Argentina -   Pro");
+        source1_1.setHomeTeam("Deportes Iquique");
+        source1_1.setAwayTeam("Deportes Iquique");
         source1_1.setSource(1);
 
         SourceData source2_1 = new SourceData();
-        source2_1.setLeagueName("Colombia Primera A");
-        source2_1.setHomeTeam("Atletico Nacional Medellin");
-        source2_1.setAwayTeam("2");
+        source2_1.setLeagueName("Argentina Liga  ");
+        source2_1.setHomeTeam("Deportes Iquique");
+        source2_1.setAwayTeam("Deportes Iquique");
         source2_1.setSource(2);
 
         SourceData source3_1 = new SourceData();
-        source3_1.setLeagueName("Colombia - Primera A");
-        source3_1.setHomeTeam("Atletico Nacional Medellin");
-        source3_1.setAwayTeam("3");
+        source3_1.setLeagueName("Argentina -  ");
+        source3_1.setHomeTeam("Deportes Iquique");
+        source3_1.setAwayTeam("Deportes Iquique");
         source3_1.setSource(3);
 
         request1.setSource1(source1_1);

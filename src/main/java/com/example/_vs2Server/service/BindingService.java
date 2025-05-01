@@ -112,8 +112,21 @@ public class BindingService {
         Set<String> allTeams = new HashSet<>();
 
         leagueTeamsMap.forEach((league, teams) -> {
-            allLeagues.addAll(findExistingValuesInLeague(league, leagueField, leagueField, Collections.singleton(league)));
-            allTeams.addAll(findTeamDuplicatesInLeague(league, leagueField, homeField, awayField, teams));
+            // ✅ 仅查询当前数据源对应的联赛字段（如source1League=league）
+            allLeagues.addAll(findExistingValuesInLeague(
+                    league,
+                    leagueField,  // 例如 "source1League"（与数据源强绑定）
+                    leagueField,  // 目标字段是联赛字段本身（用于标记重复联赛）
+                    Collections.singleton(league)
+            ));
+            // ✅ 仅查询当前数据源对应的球队字段（如source1HomeTeam/source1AwayTeam）
+            allTeams.addAll(findTeamDuplicatesInLeague(
+                    league,
+                    leagueField,  // 数据源对应的联赛字段（如source1League）
+                    homeField,    // 数据源对应的主队字段（如source1HomeTeam）
+                    awayField,    // 数据源对应的客队字段（如source1AwayTeam）
+                    teams
+            ));
         });
 
         return Map.of(
@@ -122,27 +135,41 @@ public class BindingService {
         );
     }
 
-    private Set<String> findTeamDuplicatesInLeague(String league, String leagueField, String homeField, String awayField, Set<String> teams) {
+    private Set<String> findTeamDuplicatesInLeague(
+            String league,
+            String leagueField,  // 当前数据源的联赛字段（如source1League）
+            String homeField,    // 当前数据源的主队字段（如source1HomeTeam）
+            String awayField,    // 当前数据源的客队字段（如source1AwayTeam）
+            Set<String> teams
+    ) {
         Set<String> result = new HashSet<>();
         if (!teams.isEmpty()) {
+            // ✅ 仅查询当前数据源的主队字段是否在联赛+球队条件下重复
             result.addAll(findExistingValuesInLeague(league, leagueField, homeField, teams));
+            // ✅ 仅查询当前数据源的客队字段是否在联赛+球队条件下重复
             result.addAll(findExistingValuesInLeague(league, leagueField, awayField, teams));
         }
         return result;
     }
 
-    private Set<String> findExistingValuesInLeague(String league, String leagueField, String field, Set<String> values) {
-        if (values.isEmpty()) return Collections.emptySet();
-
+    private Set<String> findExistingValuesInLeague(
+            String league,
+            String leagueField,  // 当前数据源的联赛字段（如source1League）
+            String targetField,  // 目标字段（可能是联赛字段或球队字段）
+            Set<String> values
+    ) {
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         CriteriaQuery<String> query = cb.createQuery(String.class);
         Root<Binding> root = query.from(Binding.class);
 
+        // ✅ 新增条件：联赛字段必须等于当前联赛（且属于当前数据源）
         Predicate leaguePredicate = cb.equal(root.get(leagueField), league);
-        Predicate valuePredicate = root.get(field).in(values);
+        // 目标字段（如主队/客队）在传入的球队集合中
+        Predicate valuePredicate = root.get(targetField).in(values);
 
-        query.select(root.get(field)).distinct(true);
-        query.where(cb.and(leaguePredicate, valuePredicate));
+        query.select(root.get(targetField))
+                .where(cb.and(leaguePredicate, valuePredicate)) // 必须同时满足数据源联赛+目标值
+                .distinct(true);
 
         return new HashSet<>(entityManager.createQuery(query).getResultList());
     }
