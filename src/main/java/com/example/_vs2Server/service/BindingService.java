@@ -92,14 +92,20 @@ public class BindingService {
         int source = request.getSource();
         validateSource(source);
 
-        String leagueField = "source" + source + "League";
-        String homeField = "source" + source + "HomeTeam";
-        String awayField = "source" + source + "AwayTeam";
+        // 动态获取当前数据源的字段名
+        String currentLeagueField = "source" + source + "League";
+        String currentHomeField = "source" + source + "HomeTeam";
+        String currentAwayField = "source" + source + "AwayTeam";
 
-        validateField(leagueField);
-        validateField(homeField);
-        validateField(awayField);
+        validateField(currentLeagueField);
+        validateField(currentHomeField);
+        validateField(currentAwayField);
 
+        // 存储最终结果
+        Set<String> duplicateLeagues = new HashSet<>();
+        Set<String> duplicateTeams = new HashSet<>();
+
+        // 按联赛分组处理
         Map<String, Set<String>> leagueTeamsMap = new HashMap<>();
         request.getMatches().forEach(match -> {
             String league = match.getLeague();
@@ -108,32 +114,46 @@ public class BindingService {
             leagueTeamsMap.get(league).add(match.getAwayTeam());
         });
 
-        Set<String> allLeagues = new HashSet<>();
-        Set<String> allTeams = new HashSet<>();
-
+        // 处理每个联赛
         leagueTeamsMap.forEach((league, teams) -> {
-            // ✅ 仅查询当前数据源对应的联赛字段（如source1League=league）
-            allLeagues.addAll(findExistingValuesInLeague(
+            // 1. 检查联赛是否已存在（仅在当前数据源）
+            Set<String> existingLeagues = findExistingValuesInLeague(
                     league,
-                    leagueField,  // 例如 "source1League"（与数据源强绑定）
-                    leagueField,  // 目标字段是联赛字段本身（用于标记重复联赛）
+                    currentLeagueField,  // 使用当前数据源的联赛字段
+                    currentLeagueField,  // 目标字段也是当前数据源的联赛字段
                     Collections.singleton(league)
-            ));
-            // ✅ 仅查询当前数据源对应的球队字段（如source1HomeTeam/source1AwayTeam）
-            allTeams.addAll(findTeamDuplicatesInLeague(
-                    league,
-                    leagueField,  // 数据源对应的联赛字段（如source1League）
-                    homeField,    // 数据源对应的主队字段（如source1HomeTeam）
-                    awayField,    // 数据源对应的客队字段（如source1AwayTeam）
-                    teams
-            ));
+            );
+            if (!existingLeagues.isEmpty()) {
+                duplicateLeagues.addAll(existingLeagues);
+            }
+
+            // 2. 检查球队是否重复（仅在当前联赛内）
+            if (!teams.isEmpty()) {
+                // 只检查当前数据源的主客队字段
+                Set<String> existingHomeTeams = findExistingValuesInLeague(
+                        league,
+                        currentLeagueField,
+                        currentHomeField,
+                        teams
+                );
+                Set<String> existingAwayTeams = findExistingValuesInLeague(
+                        league,
+                        currentLeagueField,
+                        currentAwayField,
+                        teams
+                );
+
+                duplicateTeams.addAll(existingHomeTeams);
+                duplicateTeams.addAll(existingAwayTeams);
+            }
         });
 
         return Map.of(
-                "leagues", new ArrayList<>(allLeagues),
-                "teams", new ArrayList<>(allTeams)
+                "leagues", new ArrayList<>(duplicateLeagues),
+                "teams", new ArrayList<>(duplicateTeams)
         );
     }
+
 
     private Set<String> findTeamDuplicatesInLeague(
             String league,
@@ -154,21 +174,20 @@ public class BindingService {
 
     private Set<String> findExistingValuesInLeague(
             String league,
-            String leagueField,  // 当前数据源的联赛字段（如source1League）
-            String targetField,  // 目标字段（可能是联赛字段或球队字段）
-            Set<String> values
-    ) {
+            String leagueField,  // 当前数据源的联赛字段
+            String targetField,  // 当前数据源的目标字段
+            Set<String> values) {
+
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         CriteriaQuery<String> query = cb.createQuery(String.class);
         Root<Binding> root = query.from(Binding.class);
 
-        // ✅ 新增条件：联赛字段必须等于当前联赛（且属于当前数据源）
+        // 关键修改点：只检查当前数据源的联赛字段
         Predicate leaguePredicate = cb.equal(root.get(leagueField), league);
-        // 目标字段（如主队/客队）在传入的球队集合中
         Predicate valuePredicate = root.get(targetField).in(values);
 
         query.select(root.get(targetField))
-                .where(cb.and(leaguePredicate, valuePredicate)) // 必须同时满足数据源联赛+目标值
+                .where(cb.and(leaguePredicate, valuePredicate))
                 .distinct(true);
 
         return new HashSet<>(entityManager.createQuery(query).getResultList());
