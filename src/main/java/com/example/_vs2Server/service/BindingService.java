@@ -201,29 +201,13 @@ public class BindingService {
         List<Binding> relatedBindings = findRelatedBindings(source, league, team, teamType);
         for (Binding binding : relatedBindings) {
             if ("home".equals(teamType)) {
-                switch (source) {
-                    case 1:
-                        binding.setSource1HomeTeam(null);
-                        break;
-                    case 2:
-                        binding.setSource2HomeTeam(null);
-                        break;
-                    case 3:
-                        binding.setSource3HomeTeam(null);
-                        break;
-                }
+                binding.setSource1HomeTeam(null);
+                binding.setSource2HomeTeam(null);
+                binding.setSource3HomeTeam(null);
             } else if ("away".equals(teamType)) {
-                switch (source) {
-                    case 1:
-                        binding.setSource1AwayTeam(null);
-                        break;
-                    case 2:
-                        binding.setSource2AwayTeam(null);
-                        break;
-                    case 3:
-                        binding.setSource3AwayTeam(null);
-                        break;
-                }
+                binding.setSource1AwayTeam(null);
+                binding.setSource2AwayTeam(null);
+                binding.setSource3AwayTeam(null);
             }
         }
         bindingRepository.saveAll(relatedBindings);
