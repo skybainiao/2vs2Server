@@ -34,49 +34,68 @@ public class BindingService {
     @Transactional
     public void saveBindings(List<BindingRequest> requests) {
         requests.forEach(request -> {
-            Binding binding = new Binding();
-            // Source 1
+            // 获取当前请求中的三个联赛名称
             String league1 = request.getSource1().getLeagueName();
-            binding.setSource1League(league1);
-            binding.setSource1HomeTeam(checkAndSetNull(league1, request.getSource1().getHomeTeam()));
-            binding.setSource1AwayTeam(checkAndSetNull(league1, request.getSource1().getAwayTeam()));
-            // Source 2
             String league2 = request.getSource2().getLeagueName();
-            binding.setSource2League(league2);
-            binding.setSource2HomeTeam(checkAndSetNull(league2, request.getSource2().getHomeTeam()));
-            binding.setSource2AwayTeam(checkAndSetNull(league2, request.getSource2().getAwayTeam()));
-            // Source 3
             String league3 = request.getSource3().getLeagueName();
+
+            Binding binding = new Binding();
+
+            // 处理source1
+            binding.setSource1League(league1);
+            binding.setSource1HomeTeam(checkAndSetNull(league1, request.getSource1().getHomeTeam(), league1, league2, league3));
+            binding.setSource1AwayTeam(checkAndSetNull(league1, request.getSource1().getAwayTeam(), league1, league2, league3));
+
+            // 处理source2
+            binding.setSource2League(league2);
+            binding.setSource2HomeTeam(checkAndSetNull(league2, request.getSource2().getHomeTeam(), league1, league2, league3));
+            binding.setSource2AwayTeam(checkAndSetNull(league2, request.getSource2().getAwayTeam(), league1, league2, league3));
+
+            // 处理source3
             binding.setSource3League(league3);
-            binding.setSource3HomeTeam(checkAndSetNull(league3, request.getSource3().getHomeTeam()));
-            binding.setSource3AwayTeam(checkAndSetNull(league3, request.getSource3().getAwayTeam()));
+            binding.setSource3HomeTeam(checkAndSetNull(league3, request.getSource3().getHomeTeam(), league1, league2, league3));
+            binding.setSource3AwayTeam(checkAndSetNull(league3, request.getSource3().getAwayTeam(), league1, league2, league3));
+
             bindingRepository.save(binding);
         });
     }
 
-    private String checkAndSetNull(String league, String value) {
+    private String checkAndSetNull(String currentLeague, String value, String league1, String league2, String league3) {
         if (value == null) {
             return null;
         }
+
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         CriteriaQuery<Binding> query = cb.createQuery(Binding.class);
         Root<Binding> root = query.from(Binding.class);
 
-        Predicate leaguePredicate1 = cb.equal(root.get("source1League"), league);
-        Predicate leaguePredicate2 = cb.equal(root.get("source2League"), league);
-        Predicate leaguePredicate3 = cb.equal(root.get("source3League"), league);
-
-        Predicate teamPredicate1 = cb.equal(root.get("source1HomeTeam"), value);
-        Predicate teamPredicate2 = cb.equal(root.get("source1AwayTeam"), value);
-        Predicate teamPredicate3 = cb.equal(root.get("source2HomeTeam"), value);
-        Predicate teamPredicate4 = cb.equal(root.get("source2AwayTeam"), value);
-        Predicate teamPredicate5 = cb.equal(root.get("source3HomeTeam"), value);
-        Predicate teamPredicate6 = cb.equal(root.get("source3AwayTeam"), value);
-
-        Predicate finalPredicate = cb.and(
-                cb.or(leaguePredicate1, leaguePredicate2, leaguePredicate3),
-                cb.or(teamPredicate1, teamPredicate2, teamPredicate3, teamPredicate4, teamPredicate5, teamPredicate6)
+        // 核心修改：查询同时满足三个联赛条件的记录
+        Predicate leagueCombinationPredicate = cb.and(
+                cb.equal(root.get("source1League"), league1),
+                cb.equal(root.get("source2League"), league2),
+                cb.equal(root.get("source3League"), league3)
         );
+
+        // 确定当前处理的是哪个source的联赛
+        String sourcePrefix = "";
+        if (currentLeague.equals(league1)) {
+            sourcePrefix = "source1";
+        } else if (currentLeague.equals(league2)) {
+            sourcePrefix = "source2";
+        } else if (currentLeague.equals(league3)) {
+            sourcePrefix = "source3";
+        } else {
+            throw new IllegalArgumentException("当前联赛与三个数据源联赛均不匹配");
+        }
+
+        // 构建球队条件：只检查当前source对应的主队和客队字段
+        Predicate teamPredicate = cb.or(
+                cb.equal(root.get(sourcePrefix + "HomeTeam"), value),
+                cb.equal(root.get(sourcePrefix + "AwayTeam"), value)
+        );
+
+        // 最终查询条件：联赛组合匹配且当前source的球队匹配
+        Predicate finalPredicate = cb.and(leagueCombinationPredicate, teamPredicate);
 
         query.where(finalPredicate);
         List<Binding> result = entityManager.createQuery(query).getResultList();
@@ -155,22 +174,6 @@ public class BindingService {
     }
 
 
-    private Set<String> findTeamDuplicatesInLeague(
-            String league,
-            String leagueField,  // 当前数据源的联赛字段（如source1League）
-            String homeField,    // 当前数据源的主队字段（如source1HomeTeam）
-            String awayField,    // 当前数据源的客队字段（如source1AwayTeam）
-            Set<String> teams
-    ) {
-        Set<String> result = new HashSet<>();
-        if (!teams.isEmpty()) {
-            // ✅ 仅查询当前数据源的主队字段是否在联赛+球队条件下重复
-            result.addAll(findExistingValuesInLeague(league, leagueField, homeField, teams));
-            // ✅ 仅查询当前数据源的客队字段是否在联赛+球队条件下重复
-            result.addAll(findExistingValuesInLeague(league, leagueField, awayField, teams));
-        }
-        return result;
-    }
 
     private Set<String> findExistingValuesInLeague(
             String league,
@@ -198,13 +201,29 @@ public class BindingService {
         List<Binding> relatedBindings = findRelatedBindings(source, league, team, teamType);
         for (Binding binding : relatedBindings) {
             if ("home".equals(teamType)) {
-                binding.setSource1HomeTeam(null);
-                binding.setSource2HomeTeam(null);
-                binding.setSource3HomeTeam(null);
+                switch (source) {
+                    case 1:
+                        binding.setSource1HomeTeam(null);
+                        break;
+                    case 2:
+                        binding.setSource2HomeTeam(null);
+                        break;
+                    case 3:
+                        binding.setSource3HomeTeam(null);
+                        break;
+                }
             } else if ("away".equals(teamType)) {
-                binding.setSource1AwayTeam(null);
-                binding.setSource2AwayTeam(null);
-                binding.setSource3AwayTeam(null);
+                switch (source) {
+                    case 1:
+                        binding.setSource1AwayTeam(null);
+                        break;
+                    case 2:
+                        binding.setSource2AwayTeam(null);
+                        break;
+                    case 3:
+                        binding.setSource3AwayTeam(null);
+                        break;
+                }
             }
         }
         bindingRepository.saveAll(relatedBindings);
