@@ -66,4 +66,15 @@ public class BindingController {
                     .body("删除失败: " + e.getMessage());
         }
     }
+
+
+    // 新增API：检查比赛是否存在于数据库
+    @PostMapping("/check-existing")
+    public ResponseEntity<Map<String, Object>> checkMatchesExisting(@RequestBody CheckDuplicateRequest request) {
+        try {
+            return ResponseEntity.ok(bindingService.checkMatchesExisting(request));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
 }    

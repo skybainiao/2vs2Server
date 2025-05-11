@@ -267,4 +267,70 @@ public class BindingService {
             throw new IllegalArgumentException("无效的字段名称: " + field);
         }
     }
+
+
+    // 新增方法：检查比赛是否存在于数据库
+    public Map<String, Object> checkMatchesExisting(CheckDuplicateRequest request) {
+        int source = request.getSource();
+        validateSource(source);
+
+        // 动态获取当前数据源的字段名
+        String currentLeagueField = "source" + source + "League";
+        String currentHomeField = "source" + source + "HomeTeam";
+        String currentAwayField = "source" + source + "AwayTeam";
+
+        validateField(currentLeagueField);
+        validateField(currentHomeField);
+        validateField(currentAwayField);
+
+        // 提取所有联赛和球队
+        Set<String> allLeagues = new HashSet<>();
+        Set<String> allTeams = new HashSet<>();
+
+        for (CheckDuplicateRequest.MatchData match : request.getMatches()) {
+            allLeagues.add(match.getLeague());
+            allTeams.add(match.getHomeTeam());
+            allTeams.add(match.getAwayTeam());
+        }
+
+        // 查询数据库中存在的联赛和球队
+        Set<String> existingLeagues = findExistingValuesInAnyLeague(
+                currentLeagueField,
+                allLeagues
+        );
+
+        Set<String> existingTeams = findExistingValuesInAnyLeague(
+                currentHomeField,
+                allTeams
+        );
+
+        existingTeams.addAll(findExistingValuesInAnyLeague(
+                currentAwayField,
+                allTeams
+        ));
+
+        return Map.of(
+                "leagues", existingLeagues,
+                "teams", existingTeams
+        );
+    }
+
+
+    // 新增辅助方法：在任意联赛中查找存在的值
+    private Set<String> findExistingValuesInAnyLeague(
+            String targetField,
+            Set<String> values) {
+
+        CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+        CriteriaQuery<String> query = cb.createQuery(String.class);
+        Root<Binding> root = query.from(Binding.class);
+
+        Predicate valuePredicate = root.get(targetField).in(values);
+
+        query.select(root.get(targetField))
+                .where(valuePredicate)
+                .distinct(true);
+
+        return new HashSet<>(entityManager.createQuery(query).getResultList());
+    }
 }
