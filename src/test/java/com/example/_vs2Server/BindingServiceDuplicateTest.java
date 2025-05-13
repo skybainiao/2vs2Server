@@ -102,20 +102,20 @@ public class BindingServiceDuplicateTest {
         BindingRequest request1 = new BindingRequest();
         SourceData source1_1 = new SourceData();
         source1_1.setLeagueName("4");
-        source1_1.setHomeTeam("e1");
-        source1_1.setAwayTeam("f1");
+        source1_1.setHomeTeam("a1");
+        source1_1.setAwayTeam("b1");
         source1_1.setSource(1);
 
         SourceData source2_1 = new SourceData();
         source2_1.setLeagueName("5");
-        source2_1.setHomeTeam("e2");
-        source2_1.setAwayTeam("f2");
+        source2_1.setHomeTeam("a2");
+        source2_1.setAwayTeam("b2");
         source2_1.setSource(2);
 
         SourceData source3_1 = new SourceData();
         source3_1.setLeagueName("6");
-        source3_1.setHomeTeam("e3");
-        source3_1.setAwayTeam("f3");
+        source3_1.setHomeTeam("a3");
+        source3_1.setAwayTeam("b3");
         source3_1.setSource(3);
 
 

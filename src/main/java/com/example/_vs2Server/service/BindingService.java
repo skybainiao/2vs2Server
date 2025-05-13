@@ -2,6 +2,7 @@ package com.example._vs2Server.service;
 
 import com.example._vs2Server.dto.BindingRequest;
 import com.example._vs2Server.dto.CheckDuplicateRequest;
+import com.example._vs2Server.dto.SourceData;
 import com.example._vs2Server.model.Binding;
 import com.example._vs2Server.repository.BindingRepository;
 import jakarta.persistence.EntityManager;
@@ -34,33 +35,36 @@ public class BindingService {
     @Transactional
     public void saveBindings(List<BindingRequest> requests) {
         requests.forEach(request -> {
-            // 获取当前请求中的三个联赛名称
+            // 提取三个数据源的联赛名称（与数据源编号1/2/3一一对应）
             String league1 = request.getSource1().getLeagueName();
             String league2 = request.getSource2().getLeagueName();
             String league3 = request.getSource3().getLeagueName();
 
             Binding binding = new Binding();
 
-            // 处理source1
+            // 处理数据源1：主队和客队，数据源编号为1
+            SourceData source1Data = request.getSource1();
             binding.setSource1League(league1);
-            binding.setSource1HomeTeam(checkAndSetNull(league1, request.getSource1().getHomeTeam(), league1, league2, league3));
-            binding.setSource1AwayTeam(checkAndSetNull(league1, request.getSource1().getAwayTeam(), league1, league2, league3));
+            binding.setSource1HomeTeam(checkAndSetNull(1, source1Data.getHomeTeam(), league1, league2, league3));
+            binding.setSource1AwayTeam(checkAndSetNull(1, source1Data.getAwayTeam(), league1, league2, league3));
 
-            // 处理source2
+            // 处理数据源2：主队和客队，数据源编号为2
+            SourceData source2Data = request.getSource2();
             binding.setSource2League(league2);
-            binding.setSource2HomeTeam(checkAndSetNull(league2, request.getSource2().getHomeTeam(), league1, league2, league3));
-            binding.setSource2AwayTeam(checkAndSetNull(league2, request.getSource2().getAwayTeam(), league1, league2, league3));
+            binding.setSource2HomeTeam(checkAndSetNull(2, source2Data.getHomeTeam(), league1, league2, league3));
+            binding.setSource2AwayTeam(checkAndSetNull(2, source2Data.getAwayTeam(), league1, league2, league3));
 
-            // 处理source3
+            // 处理数据源3：主队和客队，数据源编号为3（关键修复：此处编号为3）
+            SourceData source3Data = request.getSource3();
             binding.setSource3League(league3);
-            binding.setSource3HomeTeam(checkAndSetNull(league3, request.getSource3().getHomeTeam(), league1, league2, league3));
-            binding.setSource3AwayTeam(checkAndSetNull(league3, request.getSource3().getAwayTeam(), league1, league2, league3));
+            binding.setSource3HomeTeam(checkAndSetNull(3, source3Data.getHomeTeam(), league1, league2, league3)); // 数据源编号3
+            binding.setSource3AwayTeam(checkAndSetNull(3, source3Data.getAwayTeam(), league1, league2, league3)); // 数据源编号3
 
             bindingRepository.save(binding);
         });
     }
 
-    private String checkAndSetNull(String currentLeague, String value, String league1, String league2, String league3) {
+    private String checkAndSetNull(int dataSource, String value, String league1, String league2, String league3) {
         if (value == null) {
             return null;
         }
@@ -69,37 +73,40 @@ public class BindingService {
         CriteriaQuery<Binding> query = cb.createQuery(Binding.class);
         Root<Binding> root = query.from(Binding.class);
 
-        // 核心修改：查询同时满足三个联赛条件的记录
+        // 联赛组合条件：必须同时匹配三个数据源的联赛（与数据源编号无关，仅校验联赛组合）
         Predicate leagueCombinationPredicate = cb.and(
                 cb.equal(root.get("source1League"), league1),
                 cb.equal(root.get("source2League"), league2),
                 cb.equal(root.get("source3League"), league3)
         );
 
-        // 确定当前处理的是哪个source的联赛
-        String sourcePrefix = "";
-        if (currentLeague.equals(league1)) {
-            sourcePrefix = "source1";
-        } else if (currentLeague.equals(league2)) {
-            sourcePrefix = "source2";
-        } else if (currentLeague.equals(league3)) {
-            sourcePrefix = "source3";
-        } else {
-            throw new IllegalArgumentException("当前联赛与三个数据源联赛均不匹配");
+        // 根据数据源编号（1/2/3）确定字段前缀，彻底解耦联赛名称与数据源的关系
+        String sourcePrefix;
+        switch (dataSource) {
+            case 1:
+                sourcePrefix = "source1";
+                break;
+            case 2:
+                sourcePrefix = "source2";
+                break;
+            case 3:
+                sourcePrefix = "source3";
+                break;
+            default:
+                throw new IllegalArgumentException("无效的数据源编号，必须为1、2或3");
         }
 
-        // 构建球队条件：只检查当前source对应的主队和客队字段
+        // 球队存在性条件：当前数据源的主队或客队字段等于目标值
         Predicate teamPredicate = cb.or(
                 cb.equal(root.get(sourcePrefix + "HomeTeam"), value),
                 cb.equal(root.get(sourcePrefix + "AwayTeam"), value)
         );
 
-        // 最终查询条件：联赛组合匹配且当前source的球队匹配
-        Predicate finalPredicate = cb.and(leagueCombinationPredicate, teamPredicate);
-
-        query.where(finalPredicate);
+        // 组合查询条件：联赛组合匹配 + 当前数据源球队匹配
+        query.where(cb.and(leagueCombinationPredicate, teamPredicate));
         List<Binding> result = entityManager.createQuery(query).getResultList();
 
+        // 若存在重复记录，返回null（置空字段），否则保留原值
         return result.isEmpty() ? value : null;
     }
 
