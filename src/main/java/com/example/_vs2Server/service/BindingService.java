@@ -276,50 +276,85 @@ public class BindingService {
     }
 
 
-    // 新增方法：检查比赛是否存在于数据库
+    // 新增方法：检查比赛是否存在（优化后逻辑）
     public Map<String, Object> checkMatchesExisting(CheckDuplicateRequest request) {
         int source = request.getSource();
         validateSource(source);
 
-        // 动态获取当前数据源的字段名
-        String currentLeagueField = "source" + source + "League";
-        String currentHomeField = "source" + source + "HomeTeam";
-        String currentAwayField = "source" + source + "AwayTeam";
+        // 动态获取数据源字段前缀（source1/source2/source3）
+        String sourcePrefix = "source" + source;
+        String leagueField = sourcePrefix + "League";
+        String homeField = sourcePrefix + "HomeTeam";
+        String awayField = sourcePrefix + "AwayTeam";
 
-        validateField(currentLeagueField);
-        validateField(currentHomeField);
-        validateField(currentAwayField);
+        validateField(leagueField);
+        validateField(homeField);
+        validateField(awayField);
 
-        // 提取所有联赛和球队
-        Set<String> allLeagues = new HashSet<>();
-        Set<String> allTeams = new HashSet<>();
+        Set<String> existingLeagues = new HashSet<>();  // 存在的联赛
+        Set<String> existingTeamsInLeagues = new HashSet<>();  // 联赛内存在的球队
 
         for (CheckDuplicateRequest.MatchData match : request.getMatches()) {
-            allLeagues.add(match.getLeague());
-            allTeams.add(match.getHomeTeam());
-            allTeams.add(match.getAwayTeam());
+            String league = match.getLeague();
+            String homeTeam = match.getHomeTeam();
+            String awayTeam = match.getAwayTeam();
+
+            // 1. 先检查联赛是否存在于目标数据源
+            boolean leagueExists = isLeagueExists(sourcePrefix, league);
+            if (leagueExists) {
+                existingLeagues.add(league);  // 记录存在的联赛
+
+                // 2. 仅在该联赛范围内检查球队是否存在
+                checkTeamsInLeague(sourcePrefix, league, homeTeam, existingTeamsInLeagues);
+                checkTeamsInLeague(sourcePrefix, league, awayTeam, existingTeamsInLeagues);
+            }
         }
-
-        // 查询数据库中存在的联赛和球队
-        Set<String> existingLeagues = findExistingValuesInAnyLeague(
-                currentLeagueField,
-                allLeagues
-        );
-
-        Set<String> existingTeams = findExistingValuesInAnyLeague(
-                currentHomeField,
-                allTeams
-        );
-
-        existingTeams.addAll(findExistingValuesInAnyLeague(
-                currentAwayField,
-                allTeams
-        ));
 
         return Map.of(
                 "leagues", existingLeagues,
-                "teams", existingTeams
+                "teams", existingTeamsInLeagues
         );
+    }
+
+    // 辅助方法：检查联赛是否存在
+    private boolean isLeagueExists(String sourcePrefix, String league) {
+        CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+        CriteriaQuery<Long> query = cb.createQuery(Long.class);
+        Root<Binding> root = query.from(Binding.class);
+        query.select(cb.literal(1L))
+                .where(cb.equal(root.get(sourcePrefix + "League"), league));
+        return entityManager.createQuery(query).getResultList().size() > 0;
+    }
+
+    private void checkTeamsInLeague(
+            String sourcePrefix,
+            String league,
+            String team,
+            Set<String> existingTeams
+    ) {
+        if (team == null) return;
+
+        CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+        CriteriaQuery<String> query = cb.createQuery(String.class);
+        Root<Binding> root = query.from(Binding.class);
+
+        // 核心：在同一个查询中用OR条件同时检查主客队
+        Predicate condition = cb.and(
+                cb.equal(root.get(sourcePrefix + "League"), league),  // 联赛存在
+                cb.or(
+                        cb.equal(root.get(sourcePrefix + "HomeTeam"), team),  // 主队匹配
+                        cb.equal(root.get(sourcePrefix + "AwayTeam"), team)   // 客队匹配
+                )
+        );
+
+        query.select(root.get(sourcePrefix + "HomeTeam"))  // 任意字段，因为条件已包含主客队
+                .where(condition)
+                .distinct(true);  // 去重，避免重复记录
+
+        // 只要查询结果非空，说明球队存在于该联赛的主客队中
+        if (!entityManager.createQuery(query).getResultList().isEmpty()) {
+            existingTeams.add(team);
+        }
     }
 
 
